@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 class ServerInfo(BaseModel):
@@ -24,11 +22,6 @@ class TrafficPurchaseInfo(BaseModel):
     created_at: datetime
     days_remaining: int
     progress_percent: float
-
-    @field_serializer('expires_at', 'created_at')
-    def serialize_datetime(self, value: datetime) -> str:
-        """Serialize datetime to local timezone string."""
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S') if value else None
 
 
 class SubscriptionData(BaseModel):
@@ -66,11 +59,6 @@ class SubscriptionData(BaseModel):
     tariff_name: str | None = None
     traffic_reset_mode: str | None = None
 
-    @field_serializer('start_date', 'end_date', 'next_daily_charge_at')
-    def serialize_datetime(self, value: datetime) -> str:
-        """Serialize datetime to local timezone string."""
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S') if value else None
-
     class Config:
         from_attributes = True
 
@@ -100,6 +88,10 @@ class RenewalRequest(BaseModel):
     """Request to renew subscription."""
 
     period_days: int = Field(..., ge=1, le=3650, description='Renewal period in days')
+    subscription_id: int | None = Field(
+        default=None,
+        description='ID of subscription to renew (required in multi-tariff mode)',
+    )
 
 
 class TrafficPackageResponse(BaseModel):

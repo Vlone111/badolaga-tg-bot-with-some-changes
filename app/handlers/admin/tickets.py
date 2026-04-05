@@ -20,7 +20,6 @@ from app.localization.texts import get_texts
 from app.services.support_settings_service import SupportSettingsService
 from app.states import AdminTicketStates
 from app.utils.cache import RateLimitCache
-from app.utils.timezone import format_local_datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -233,8 +232,10 @@ async def view_admin_ticket(
         TicketStatus.PENDING.value: texts.t('TICKET_STATUS_PENDING', 'В ожидании'),
     }.get(ticket.status, ticket.status)
 
-    user_name = ticket.user.full_name if ticket.user else 'Unknown'
-    telegram_id_display = (ticket.user.telegram_id or ticket.user.email or f'#{ticket.user.id}') if ticket.user else '—'
+    user_name = html.escape(ticket.user.full_name) if ticket.user else 'Unknown'
+    telegram_id_display = (
+        html.escape(str(ticket.user.telegram_id or ticket.user.email or f'#{ticket.user.id}')) if ticket.user else '—'
+    )
     username_value = ticket.user.username if ticket.user else None
     id_label = 'Telegram ID' if (ticket.user and ticket.user.telegram_id) else 'ID'
 
@@ -246,15 +247,15 @@ async def view_admin_ticket(
         header += f'📱 Username: @{safe_username}\n'
     else:
         header += '📱 Username: отсутствует\n'
-    header += f'📝 Заголовок: {ticket.title}\n'
+    header += f'📝 Заголовок: {html.escape(ticket.title)}\n'
     header += f'📊 Статус: {ticket.status_emoji} {status_text}\n'
-    header += f'📅 Создан: {format_local_datetime(ticket.created_at, "%d.%m.%Y %H:%M")}\n\n'
+    header += f'📅 Создан: {ticket.created_at.strftime("%d.%m.%Y %H:%M")}\n\n'
 
     if ticket.is_user_reply_blocked:
         if ticket.user_reply_block_permanent:
             header += '🚫 Пользователь заблокирован навсегда\n\n'
         elif ticket.user_reply_block_until:
-            header += f'⏳ Блок до: {format_local_datetime(ticket.user_reply_block_until, "%d.%m.%Y %H:%M")}\n\n'
+            header += f'⏳ Блок до: {ticket.user_reply_block_until.strftime("%d.%m.%Y %H:%M")}\n\n'
 
     # Формируем блоки сообщений
     message_blocks: list[str] = []
@@ -262,7 +263,7 @@ async def view_admin_ticket(
         message_blocks.append(f'💬 Сообщения ({len(ticket.messages)}):\n\n')
         for msg in ticket.messages:
             sender = '👤 Пользователь' if msg.is_user_message else '🛠️ Поддержка'
-            block = f'{sender} ({format_local_datetime(msg.created_at, "%d.%m %H:%M")}):\n{msg.message_text}\n\n'
+            block = f'{sender} ({msg.created_at.strftime("%d.%m %H:%M")}):\n{html.escape(msg.message_text)}\n\n'
             if getattr(msg, 'has_media', False) and getattr(msg, 'media_type', None) == 'photo':
                 block += '📎 Вложение: фото\n\n'
             message_blocks.append(block)
@@ -802,13 +803,13 @@ async def handle_admin_block_duration_input(message: types.Message, state: FSMCo
                 TicketStatus.CLOSED.value: texts.t('TICKET_STATUS_CLOSED', 'Закрыт'),
                 TicketStatus.PENDING.value: texts.t('TICKET_STATUS_PENDING', 'В ожидании'),
             }.get(updated.status, updated.status)
-            user_name = updated.user.full_name if updated.user else 'Unknown'
+            user_name = html.escape(updated.user.full_name) if updated.user else 'Unknown'
             ticket_text = f'🎫 Тикет #{updated.id}\n\n'
             ticket_text += f'👤 Пользователь: {user_name}\n'
-            ticket_text += f'📝 Заголовок: {updated.title}\n'
+            ticket_text += f'📝 Заголовок: {html.escape(updated.title)}\n'
             ticket_text += f'📊 Статус: {updated.status_emoji} {status_text}\n'
-            ticket_text += f'📅 Создан: {format_local_datetime(updated.created_at, "%d.%m.%Y %H:%M")}\n'
-            ticket_text += f'🔄 Обновлен: {format_local_datetime(updated.updated_at, "%d.%m.%Y %H:%M")}\n'
+            ticket_text += f'📅 Создан: {updated.created_at.strftime("%d.%m.%Y %H:%M")}\n'
+            ticket_text += f'🔄 Обновлен: {updated.updated_at.strftime("%d.%m.%Y %H:%M")}\n'
             if updated.user and updated.user.telegram_id:
                 ticket_text += f'🆔 Telegram ID: <code>{updated.user.telegram_id}</code>\n'
                 if updated.user.username:
@@ -824,7 +825,7 @@ async def handle_admin_block_duration_input(message: types.Message, state: FSMCo
                     ticket_text += f'🔗 Чат по ID: <a href="{chat_link}">{chat_link}</a>\n'
             elif updated.user:
                 # Email-only user
-                user_id_display = updated.user.email or f'#{updated.user.id}'
+                user_id_display = html.escape(str(updated.user.email or f'#{updated.user.id}'))
                 ticket_text += f'🆔 ID: <code>{user_id_display}</code>\n'
                 ticket_text += '📧 Тип: Email-пользователь\n'
             ticket_text += '\n'
@@ -832,13 +833,13 @@ async def handle_admin_block_duration_input(message: types.Message, state: FSMCo
                 if updated.user_reply_block_permanent:
                     ticket_text += '🚫 Пользователь заблокирован навсегда для ответов в этом тикете\n'
                 elif updated.user_reply_block_until:
-                    ticket_text += f'⏳ Блок до: {format_local_datetime(updated.user_reply_block_until, "%d.%m.%Y %H:%M")}\n'
+                    ticket_text += f'⏳ Блок до: {updated.user_reply_block_until.strftime("%d.%m.%Y %H:%M")}\n'
             if updated.messages:
                 ticket_text += f'💬 Сообщения ({len(updated.messages)}):\n\n'
                 for msg in updated.messages:
                     sender = '👤 Пользователь' if msg.is_user_message else '🛠️ Поддержка'
-                    ticket_text += f'{sender} ({format_local_datetime(msg.created_at, "%d.%m %H:%M")}):\n'
-                    ticket_text += f'{msg.message_text}\n\n'
+                    ticket_text += f'{sender} ({msg.created_at.strftime("%d.%m %H:%M")}):\n'
+                    ticket_text += f'{html.escape(msg.message_text)}\n\n'
                     if getattr(msg, 'has_media', False) and getattr(msg, 'media_type', None) == 'photo':
                         ticket_text += '📎 Вложение: фото\n\n'
 

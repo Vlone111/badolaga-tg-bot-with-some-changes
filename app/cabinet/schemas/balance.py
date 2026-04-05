@@ -3,9 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BalanceResponse(BaseModel):
@@ -29,12 +27,6 @@ class TransactionResponse(BaseModel):
     completed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
-
-    @field_serializer('created_at', 'completed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class TransactionListResponse(BaseModel):
@@ -73,7 +65,6 @@ class TopUpRequest(BaseModel):
     amount_kopeks: int = Field(..., ge=1000, le=2_000_000_000, description='Amount in kopeks (min 10 rubles)')
     payment_method: str = Field(..., description='Payment method ID')
     payment_option: str | None = Field(None, description='Payment option (e.g. Platega method code)')
-    referral_code: str | None = Field(None, description='Referral code to apply (if user has no referrer yet)')
 
 
 class TopUpResponse(BaseModel):
@@ -85,12 +76,6 @@ class TopUpResponse(BaseModel):
     amount_rubles: float
     status: str
     expires_at: datetime | None = None
-
-    @field_serializer('expires_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class StarsInvoiceRequest(BaseModel):
@@ -130,12 +115,6 @@ class PendingPaymentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_serializer('created_at', 'expires_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class PendingPaymentListResponse(BaseModel):
     """Paginated list of pending payments."""
@@ -169,12 +148,6 @@ class SavedCardResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class SavedCardsListResponse(BaseModel):

@@ -1,3 +1,5 @@
+import html
+
 import structlog
 from aiogram import Dispatcher, F, types
 from aiogram.fsm.context import FSMContext
@@ -9,7 +11,6 @@ from app.keyboards.admin import get_admin_main_keyboard, get_maintenance_keyboar
 from app.localization.texts import get_texts
 from app.services.maintenance_service import maintenance_service
 from app.utils.decorators import admin_required, error_handler
-from app.utils.timezone import format_local_datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -47,14 +48,14 @@ async def show_maintenance_panel(callback: types.CallbackQuery, db_user: User, d
 
     enabled_info = ''
     if status_info['is_active'] and status_info['enabled_at']:
-        enabled_time = format_local_datetime(status_info['enabled_at'], '%d.%m.%Y %H:%M:%S')
+        enabled_time = status_info['enabled_at'].strftime('%d.%m.%Y %H:%M:%S')
         enabled_info = f'\n📅 <b>Включен:</b> {enabled_time}'
         if status_info['reason']:
             enabled_info += f'\n📝 <b>Причина:</b> {status_info["reason"]}'
 
     last_check_info = ''
     if status_info['last_check']:
-        last_check_time = format_local_datetime(status_info['last_check'], '%H:%M:%S')
+        last_check_time = status_info['last_check'].strftime('%H:%M:%S')
         last_check_info = f'\n🕐 <b>Последняя проверка:</b> {last_check_time}'
 
     failures_info = ''
@@ -134,7 +135,7 @@ async def process_maintenance_reason(message: types.Message, db_user: User, db: 
     if success:
         response_text = 'Режим техработ включен'
         if reason:
-            response_text += f'\nПричина: {reason}'
+            response_text += f'\nПричина: {html.escape(reason)}'
     else:
         response_text = 'Ошибка включения режима техработ'
 

@@ -42,9 +42,13 @@ async def start_simple_subscription_purchase(
         await callback.answer('❌ Простая покупка подписки временно недоступна', show_alert=True)
         return
 
+    if settings.is_multi_tariff_enabled():
+        await callback.answer('Используйте выбор тарифа для управления подписками', show_alert=True)
+        return
+
     # Проверка ограничения на покупку/продление подписки
     if getattr(db_user, 'restriction_subscription', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -437,7 +441,7 @@ async def handle_simple_subscription_pay_with_balance(
     # Проверяем баланс пользователя
     user_balance_kopeks = getattr(db_user, 'balance_kopeks', 0)
 
-    if user_balance_kopeks < total_required:
+    if total_required > 0 and user_balance_kopeks < total_required:
         await callback.answer('❌ Недостаточно средств на балансе для оплаты подписки', show_alert=True)
         return
 
@@ -945,6 +949,7 @@ async def handle_simple_subscription_payment_method(
                         'user_telegram_id': str(db_user.telegram_id),
                         'user_username': db_user.username or '',
                         'order_id': str(order.id),
+                        'subscription_id': str(order.id),
                         'subscription_period': str(subscription_params['period_days']),
                         'payment_purpose': 'simple_subscription_purchase',
                     },
@@ -961,6 +966,7 @@ async def handle_simple_subscription_payment_method(
                         'user_telegram_id': str(db_user.telegram_id),
                         'user_username': db_user.username or '',
                         'order_id': str(order.id),
+                        'subscription_id': str(order.id),
                         'subscription_period': str(subscription_params['period_days']),
                         'payment_purpose': 'simple_subscription_purchase',
                     },
@@ -1731,7 +1737,7 @@ async def check_simple_pal24_payment_status(
             f'🆔 ID счета: {payment.bill_id}',
             f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}',
             f'📊 Статус: {emoji} {status_text}',
-            f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M")}',
+            f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M")}',
         ]
 
         if payment.is_paid:
@@ -1867,7 +1873,7 @@ async def check_simple_mulenpay_payment_status(
         f'🆔 ID: {payment.mulen_payment_id or payment.id}',
         f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}',
         f'📊 Статус: {emoji} {status_text}',
-        f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M") if payment.created_at else "—"}',
+        f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M") if payment.created_at else "—"}',
     ]
 
     if payment.is_paid:
@@ -1937,7 +1943,7 @@ async def check_simple_cryptobot_payment_status(
         f'🆔 ID: {payment.invoice_id}',
         f'💰 Сумма: {payment.amount} {payment.asset}',
         f'📊 Статус: {emoji} {status_text}',
-        f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M") if payment.created_at else "—"}',
+        f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M") if payment.created_at else "—"}',
     ]
 
     if payment.status == 'paid':
@@ -2014,7 +2020,7 @@ async def check_simple_heleket_payment_status(
         f'🆔 UUID: {payment.uuid[:8]}...',
         f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}',
         f'📊 Статус: {emoji} {status_text}',
-        f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M") if payment.created_at else "—"}',
+        f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M") if payment.created_at else "—"}',
     ]
 
     if payment.payer_amount and payment.payer_currency:
@@ -2086,7 +2092,7 @@ async def check_simple_wata_payment_status(
         f'🆔 ID: {payment.payment_link_id}',
         f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}',
         f'📊 Статус: {emoji} {status_text}',
-        f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M") if payment.created_at else "—"}',
+        f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M") if payment.created_at else "—"}',
     ]
 
     if payment.is_paid:
@@ -2175,7 +2181,7 @@ async def confirm_simple_subscription_purchase(
     # Проверяем баланс пользователя
     user_balance_kopeks = getattr(db_user, 'balance_kopeks', 0)
 
-    if user_balance_kopeks < total_required:
+    if total_required > 0 and user_balance_kopeks < total_required:
         await callback.answer('❌ Недостаточно средств на балансе для оплаты подписки', show_alert=True)
         return
 

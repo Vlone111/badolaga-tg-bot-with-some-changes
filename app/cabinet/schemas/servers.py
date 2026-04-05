@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 class PromoGroupInfo(BaseModel):
@@ -36,12 +34,6 @@ class ServerListItem(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class ServerListResponse(BaseModel):
@@ -77,12 +69,6 @@ class ServerDetailResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at', 'updated_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class ServerUpdateRequest(BaseModel):

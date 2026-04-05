@@ -4,9 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 class UserStatusEnum(StrEnum):
@@ -52,12 +50,6 @@ class TrafficPurchaseItem(BaseModel):
     days_remaining: int
     is_expired: bool
 
-    @field_serializer('expires_at', 'created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class UserSubscriptionInfo(BaseModel):
     """User subscription information."""
@@ -77,12 +69,6 @@ class UserSubscriptionInfo(BaseModel):
     days_remaining: int = 0
     purchased_traffic_gb: int = 0
     traffic_purchases: list[TrafficPurchaseItem] = []
-
-    @field_serializer('start_date', 'end_date')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class UserPromoGroupInfo(BaseModel):
@@ -130,12 +116,6 @@ class UserListItem(BaseModel):
     restriction_topup: bool = False
     restriction_subscription: bool = False
 
-    @field_serializer('created_at', 'last_activity', 'subscription_end_date')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class UsersListResponse(BaseModel):
     """Paginated list of users."""
@@ -160,12 +140,6 @@ class UserTransactionItem(BaseModel):
     payment_method: str | None = None
     is_completed: bool = True
     created_at: datetime
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class UserReferralInfo(BaseModel):
@@ -203,8 +177,11 @@ class UserDetailResponse(BaseModel):
     last_activity: datetime | None = None
     cabinet_last_login: datetime | None = None
 
-    # Subscription
+    # Subscription (legacy single, kept for backward compat)
     subscription: UserSubscriptionInfo | None = None
+
+    # All subscriptions (multi-tariff)
+    subscriptions: list[UserSubscriptionInfo] = []
 
     # Promo group
     promo_group: UserPromoGroupInfo | None = None
@@ -239,12 +216,6 @@ class UserDetailResponse(BaseModel):
     # Remnawave UUID
     remnawave_uuid: str | None = None
 
-    @field_serializer('created_at', 'updated_at', 'last_activity', 'cabinet_last_login', 'promo_offer_discount_expires_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 # === Panel Info ===
 
@@ -265,12 +236,6 @@ class UserPanelInfoResponse(BaseModel):
     online_at: datetime | None = None
     last_connected_node_uuid: str | None = None
     last_connected_node_name: str | None = None
-
-    @field_serializer('first_connected_at', 'online_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 # === Node Usage ===
@@ -322,6 +287,9 @@ class UpdateSubscriptionRequest(BaseModel):
     action: str = Field(
         ..., description='Action: extend, shorten, set_end_date, change_tariff, set_traffic, toggle_autopay, cancel'
     )
+
+    # Target subscription (required in multi-tariff mode for non-create actions)
+    subscription_id: int | None = Field(None, description='Subscription ID to target (multi-tariff)')
 
     # For extend action
     days: int | None = Field(None, ge=1, le=3650, description='Days to extend')
@@ -422,6 +390,37 @@ class UpdateReferralCommissionResponse(BaseModel):
     success: bool
     old_commission_percent: int | None = None
     new_commission_percent: int | None = None
+    message: str
+
+
+class AssignReferrerRequest(BaseModel):
+    """Request to manually assign a referrer to a user."""
+
+    referrer_id: int = Field(..., gt=0, description='ID of the referrer user')
+
+
+class AssignReferrerResponse(BaseModel):
+    """Response after referrer assignment."""
+
+    success: bool
+    old_referrer_id: int | None = None
+    new_referrer_id: int | None = None
+    message: str
+
+
+class RemoveReferrerResponse(BaseModel):
+    """Response after removing a user's referrer."""
+
+    success: bool
+    old_referrer_id: int | None = None
+    message: str
+
+
+class RemoveReferralResponse(BaseModel):
+    """Response after removing a specific referral from a user."""
+
+    success: bool
+    removed_user_id: int
     message: str
 
 
@@ -596,12 +595,6 @@ class PanelUserInfo(BaseModel):
     subscription_url: str | None = None
     active_squads: list[str] = []
 
-    @field_serializer('expire_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class SyncFromPanelRequest(BaseModel):
     """Request to sync user from panel."""
@@ -652,6 +645,10 @@ class PanelSyncStatusResponse(BaseModel):
     remnawave_uuid: str | None = None
     last_sync: datetime | None = None
 
+    # Multi-tariff context
+    subscription_id: int | None = None
+    subscription_tariff_name: str | None = None
+
     # Bot data
     bot_subscription_status: str | None = None
     bot_subscription_end_date: datetime | None = None
@@ -672,12 +669,6 @@ class PanelSyncStatusResponse(BaseModel):
     # Differences
     has_differences: bool = False
     differences: list[str] = []
-
-    @field_serializer('last_sync', 'bot_subscription_end_date', 'panel_expire_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 # === Admin User Management Actions ===
@@ -775,12 +766,6 @@ class AdminUserGiftItem(BaseModel):
     created_at: datetime | None = None
     paid_at: datetime | None = None
     delivered_at: datetime | None = None
-
-    @field_serializer('created_at', 'paid_at', 'delivered_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class AdminUserGiftsResponse(BaseModel):

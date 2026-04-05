@@ -19,11 +19,9 @@ from app.database.crud.user_message import get_random_active_message
 from app.database.models import PromoGroup, User
 from app.handlers.subscription.traffic import add_traffic, handle_add_traffic
 from app.keyboards.inline import (
-    get_faq_list_keyboard,
     get_info_menu_keyboard,
     get_language_selection_keyboard,
     get_main_menu_keyboard_async,
-    get_settings_menu_keyboard,
 )
 from app.localization.texts import get_rules, get_texts
 from app.services.faq_service import FaqService
@@ -170,23 +168,11 @@ async def show_main_menu(
     db_user.last_activity = datetime.now(UTC)
     await db.commit()
 
-    has_active_subscription = bool(db_user.subscription and db_user.subscription.is_active)
-    subscription_is_active = False
-
-    if db_user.subscription:
-        subscription_is_active = db_user.subscription.is_active
+    # Multi-tariff aware: check if user has ANY active subscription
+    has_active_subscription = any(sub.is_active for sub in (getattr(db_user, 'subscriptions', None) or []))
+    subscription_is_active = has_active_subscription
 
     menu_text = await get_main_menu_text(db_user, texts, db)
-
-    # Если у пользователя активна подписка, показываем полную информацию о подписке в главном меню
-    menu_text_to_send = menu_text
-    if db_user.subscription and subscription_is_active:
-        try:
-            from app.handlers.subscription.purchase import get_subscription_info_text_for_start
-            menu_text_to_send = await get_subscription_info_text_for_start(db_user, db, texts)
-        except Exception as e:
-            logger.warning('Ошибка при получении текста информации о подписке для меню', error=e)
-            menu_text_to_send = menu_text
 
     draft_exists = await has_subscription_checkout_draft(db_user.id)
     show_resume_checkout = should_offer_checkout_resume(db_user, draft_exists)
@@ -220,7 +206,7 @@ async def show_main_menu(
         has_active_subscription=has_active_subscription,
         subscription_is_active=subscription_is_active,
         balance_kopeks=db_user.balance_kopeks,
-        subscription=db_user.subscription,
+        subscription=db_user.subscription,  # Uses primary subscription (multi-tariff compatible via property)
         show_resume_checkout=show_resume_checkout,
         has_saved_cart=has_saved_cart,
         custom_buttons=custom_buttons,
@@ -228,7 +214,7 @@ async def show_main_menu(
 
     await edit_or_answer_photo(
         callback=callback,
-        caption=menu_text_to_send,
+        caption=menu_text,
         keyboard=keyboard,
         parse_mode='HTML',
     )
@@ -520,7 +506,7 @@ async def show_faq_pages(
             ]
         )
 
-    buttons.append([types.InlineKeyboardButton(text=texts.BACK, callback_data='menu_info_faq')])
+    buttons.append([types.InlineKeyboardButton(text=texts.BACK, callback_data='menu_info')])
 
     await callback.message.edit_text(
         caption,
@@ -653,11 +639,11 @@ async def show_faq_page(
         [
             types.InlineKeyboardButton(
                 text=texts.t('FAQ_BACK_TO_LIST', '⬅️ К списку FAQ'),
-                callback_data='menu_info_faq',
+                callback_data='menu_faq',
             )
         ]
     )
-    keyboard_rows.append([types.InlineKeyboardButton(text=texts.BACK, callback_data='menu_info_faq')])
+    keyboard_rows.append([types.InlineKeyboardButton(text=texts.BACK, callback_data='menu_info')])
 
     await callback.message.edit_text(
         message_text,
@@ -1009,228 +995,6 @@ async def process_language_change(
     await callback.answer(texts.t('LANGUAGE_SELECTED', '🌐 Язык интерфейса обновлен.'))
 
 
-async def show_settings_menu(
-    callback: types.CallbackQuery,
-    db_user: User,
-    db: AsyncSession,
-):
-    if db_user is None:
-        # Пользователь не найден, используем язык по умолчанию
-        texts = get_texts(settings.DEFAULT_LANGUAGE)
-        await callback.answer(
-            texts.t(
-                'USER_NOT_FOUND_ERROR',
-                'Ошибка: пользователь не найден.',
-            ),
-            show_alert=True,
-        )
-        return
-
-    texts = get_texts(db_user.language)
-
-    header = texts.t('MENU_SETTINGS_HEADER', '⚙️ <b>Настройки</b>')
-    prompt = texts.t('MENU_SETTINGS_PROMPT', 'Выберите опцию:')
-    caption = f'{header}\n\n{prompt}' if prompt else header
-
-    # Создаём клавиатуру с кнопками Язык и Инфо
-    keyboard = get_settings_menu_keyboard(language=db_user.language)
-
-    await edit_or_answer_photo(
-        callback=callback,
-        caption=caption,
-        keyboard=keyboard,
-        parse_mode='HTML',
-    )
-    await callback.answer()
-
-
-async def show_faq_menu(
-    callback: types.CallbackQuery,
-    db_user: User,
-    db: AsyncSession,
-):
-    """Показывает меню с вопросами FAQ."""
-    if db_user is None:
-        texts = get_texts(settings.DEFAULT_LANGUAGE)
-        await callback.answer(
-            texts.t('USER_NOT_FOUND_ERROR', 'Ошибка: пользователь не найден.'),
-            show_alert=True,
-        )
-        return
-
-    texts = get_texts(db_user.language)
-
-    header = texts.t('MENU_FAQ_HEADER', '❓ <b>Часто задаваемые вопросы</b>')
-    prompt = texts.t('MENU_FAQ_PROMPT', 'Выберите вопрос:')
-    caption = f'{header}\n\n{prompt}' if prompt else header
-
-    # Получаем FAQ страницы из БД
-    faq_pages = await FaqService.get_pages(db, db_user.language)
-    
-    keyboard = get_faq_list_keyboard(language=db_user.language, faq_pages=faq_pages)
-
-    await edit_or_answer_photo(
-        callback=callback,
-        caption=caption,
-        keyboard=keyboard,
-        parse_mode='HTML',
-    )
-    await callback.answer()
-
-
-async def show_faq_answer(
-    callback: types.CallbackQuery,
-    db_user: User,
-    db: AsyncSession,
-):
-    """Показывает ответ на вопрос FAQ."""
-    if db_user is None:
-        texts = get_texts(settings.DEFAULT_LANGUAGE)
-        await callback.answer(
-            texts.t('USER_NOT_FOUND_ERROR', 'Ошибка: пользователь не найден.'),
-            show_alert=True,
-        )
-        return
-
-    texts = get_texts(db_user.language)
-
-    # Извлекаем ID вопроса и номер страницы из callback_data
-    raw_data = callback.data or ''
-    parts = raw_data.split(':')
-    
-    page_id = None
-    requested_page = 1
-    
-    if len(parts) >= 2:
-        try:
-            page_id = int(parts[1])
-        except ValueError:
-            page_id = None
-    
-    if len(parts) >= 3:
-        try:
-            requested_page = int(parts[2])
-        except ValueError:
-            requested_page = 1
-
-    if not page_id:
-        await callback.answer()
-        return
-
-    # Получаем страницу FAQ из БД
-    try:
-        faq_page = await FaqService.get_page(db, page_id, db_user.language)
-        
-        if not faq_page or not faq_page.is_active:
-            await callback.answer(
-                texts.t('FAQ_PAGE_NOT_AVAILABLE', 'Эта страница FAQ недоступна.'),
-                show_alert=True,
-            )
-            return
-    except Exception as e:
-        logger.error(f'Error loading FAQ page: {e}', exc_info=True)
-        await callback.answer(
-            texts.t('FAQ_PAGE_NOT_AVAILABLE', 'Эта страница FAQ недоступна.'),
-            show_alert=True,
-        )
-        return
-
-    # Разделяем контент на страницы если он слишком большой
-    content_pages = FaqService.split_content_into_pages(faq_page.content)
-    
-    if not content_pages:
-        await callback.answer(
-            texts.t('FAQ_PAGE_EMPTY', 'Текст для этой страницы ещё не добавлен.'),
-            show_alert=True,
-        )
-        return
-
-    total_pages = len(content_pages)
-    current_page = max(1, min(requested_page, total_pages))
-
-    # Формируем сообщение
-    header = texts.t('FAQ_HEADER', '❓ <b>FAQ</b>')
-    title_template = texts.t('FAQ_PAGE_TITLE', '<b>{title}</b>')
-    page_title = (faq_page.title or '').strip()
-    if not page_title:
-        page_title = texts.t('FAQ_PAGE_UNTITLED', 'Без названия')
-    title_block = title_template.format(title=html.escape(page_title))
-
-    body = content_pages[current_page - 1]
-
-    footer_template = texts.t(
-        'FAQ_PAGE_FOOTER',
-        'Страница {current} из {total}',
-    )
-    footer = ''
-    if total_pages > 1 and footer_template:
-        try:
-            footer = footer_template.format(current=current_page, total=total_pages)
-        except Exception:
-            footer = f'{current_page}/{total_pages}'
-
-    parts_to_join = [header, title_block]
-    if body:
-        parts_to_join.append(body)
-    if footer:
-        parts_to_join.append(f'<code>{footer}</code>')
-
-    message_text = '\n\n'.join(segment for segment in parts_to_join if segment)
-
-    # Формируем клавиатуру
-    keyboard_rows: list[list[types.InlineKeyboardButton]] = []
-
-    if total_pages > 1:
-        nav_row: list[types.InlineKeyboardButton] = []
-        if current_page > 1:
-            nav_row.append(
-                types.InlineKeyboardButton(
-                    text=texts.t('PAGINATION_PREV', '⬅️'),
-                    callback_data=f'faq_answer:{page_id}:{current_page - 1}',
-                )
-            )
-
-        nav_row.append(
-            types.InlineKeyboardButton(
-                text=f'{current_page}/{total_pages}',
-                callback_data='noop',
-            )
-        )
-
-        if current_page < total_pages:
-            nav_row.append(
-                types.InlineKeyboardButton(
-                    text=texts.t('PAGINATION_NEXT', '➡️'),
-                    callback_data=f'faq_answer:{page_id}:{current_page + 1}',
-                )
-            )
-
-        keyboard_rows.append(nav_row)
-
-    keyboard_rows.append(
-        [
-            types.InlineKeyboardButton(
-                text=texts.t('FAQ_BACK_TO_LIST', '⬅️ К списку FAQ'),
-                callback_data='menu_faq',
-            )
-        ]
-    )
-
-    try:
-        await callback.message.edit_text(
-            message_text,
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
-            parse_mode='HTML',
-            disable_web_page_preview=settings.DISABLE_WEB_PAGE_PREVIEW,
-        )
-    except Exception as e:
-        logger.error(f'Error sending FAQ answer: {e}', exc_info=True)
-        await callback.answer('Ошибка при загрузке ответа', show_alert=True)
-        return
-        
-    await callback.answer()
-
-
 async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext, db_user: User, db: AsyncSession):
     if db_user is None:
         # Пользователь не найден, используем язык по умолчанию
@@ -1248,23 +1012,11 @@ async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext, 
 
     texts = get_texts(db_user.language)
 
-    has_active_subscription = bool(db_user.subscription and db_user.subscription.is_active)
-    subscription_is_active = False
-
-    if db_user.subscription:
-        subscription_is_active = db_user.subscription.is_active
+    # Multi-tariff aware: check if user has ANY active subscription
+    has_active_subscription = any(sub.is_active for sub in (getattr(db_user, 'subscriptions', None) or []))
+    subscription_is_active = has_active_subscription
 
     menu_text = await get_main_menu_text(db_user, texts, db)
-
-    # Если у пользователя активна подписка, показываем полную информацию о подписке в главном меню
-    menu_text_to_send = menu_text
-    if db_user.subscription and subscription_is_active:
-        try:
-            from app.handlers.subscription.purchase import get_subscription_info_text_for_start
-            menu_text_to_send = await get_subscription_info_text_for_start(db_user, db, texts)
-        except Exception as e:
-            logger.warning('Ошибка при получении текста информации о подписке для меню', error=e)
-            menu_text_to_send = menu_text
 
     draft_exists = await has_subscription_checkout_draft(db_user.id)
     show_resume_checkout = should_offer_checkout_resume(db_user, draft_exists)
@@ -1298,7 +1050,7 @@ async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext, 
         has_active_subscription=has_active_subscription,
         subscription_is_active=subscription_is_active,
         balance_kopeks=db_user.balance_kopeks,
-        subscription=db_user.subscription,
+        subscription=db_user.subscription,  # Uses primary subscription (multi-tariff compatible via property)
         show_resume_checkout=show_resume_checkout,
         has_saved_cart=has_saved_cart,
         custom_buttons=custom_buttons,
@@ -1306,7 +1058,7 @@ async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext, 
 
     await edit_or_answer_photo(
         callback=callback,
-        caption=menu_text_to_send,
+        caption=menu_text,
         keyboard=keyboard,
         parse_mode='HTML',
     )
@@ -1410,36 +1162,93 @@ def _insert_random_message(base_text: str, random_message: str, action_prompt: s
     return f'{base_text}\n\n{random_message}'
 
 
+async def _get_multi_tariff_status(user, texts, db: AsyncSession) -> tuple[str, str]:
+    """Build subscription status text and tariff block for multi-tariff mode.
+
+    Returns (subscription_status, tariff_info_block).
+    """
+    from app.database.crud.subscription import get_all_subscriptions_by_user_id
+
+    subscriptions = await get_all_subscriptions_by_user_id(db, user.id)
+
+    if not subscriptions:
+        return texts.t('SUB_STATUS_NONE', '❌ Отсутствует'), ''
+
+    current_time = datetime.now(UTC)
+    lines: list[str] = []
+    for sub in subscriptions:
+        tariff_name = html.escape(sub.tariff.name) if sub.tariff else 'Подписка'
+        actual = sub.actual_status
+
+        if actual in ('active', 'trial'):
+            emoji = '🟢'
+        elif actual == 'limited':
+            emoji = '🟡'
+        else:
+            emoji = '🔴'
+
+        if actual == 'expired':
+            status_suffix = ' — истекла'
+        elif actual == 'disabled':
+            status_suffix = ' — отключена'
+        elif actual == 'limited':
+            status_suffix = ' — лимит трафика'
+        elif sub.end_date and sub.end_date > current_time:
+            days_left = (sub.end_date - current_time).days
+            end_str = format_local_datetime(sub.end_date, '%d.%m.%Y')
+            status_suffix = f' — до {end_str} ({days_left} дн.)'
+        else:
+            status_suffix = ''
+
+        lines.append(f'{emoji} <b>{tariff_name}</b>{status_suffix}')
+
+    status_text = '\n<blockquote>' + '\n'.join(lines) + '</blockquote>'
+    return status_text, ''
+
+
 async def get_main_menu_text(user, texts, db: AsyncSession):
     from app.config import settings
 
-    # Загружаем информацию о тарифе если включен режим тарифов
-    tariff = None
-    is_daily_tariff = False
-    tariff_info_block = ''
+    # Multi-tariff: show summary of all subscriptions
+    if settings.is_multi_tariff_enabled():
+        subscriptions_status, tariff_info_block = await _get_multi_tariff_status(user, texts, db)
 
-    subscription = getattr(user, 'subscription', None)
-    if settings.is_tariffs_mode() and subscription and subscription.tariff_id:
-        try:
-            from app.database.crud.tariff import get_tariff_by_id
+        base_text = texts.MAIN_MENU.format(
+            user_name=html.escape(user.full_name or ''),
+            subscription_status=subscriptions_status,
+        )
 
-            tariff = await get_tariff_by_id(db, subscription.tariff_id)
-            if tariff:
-                is_daily_tariff = getattr(tariff, 'is_daily', False)
-                # Формируем краткий блок информации о тарифе для главного меню
-                tariff_info_block = f'\n📦 Тариф: {tariff.name}'
-        except Exception as e:
-            logger.debug('Не удалось загрузить тариф для главного меню', error=e)
+        if tariff_info_block:
+            action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
+            if action_prompt_text in base_text:
+                base_text = base_text.replace(action_prompt_text, f'{tariff_info_block}\n\n{action_prompt_text}')
+    else:
+        # Single-tariff mode: legacy behavior
+        tariff = None
+        is_daily_tariff = False
+        tariff_info_block = ''
 
-    base_text = texts.MAIN_MENU.format(
-        user_name=user.full_name, subscription_status=_get_subscription_status(user, texts, is_daily_tariff)
-    )
+        subscription = getattr(user, 'subscription', None)
+        if settings.is_tariffs_mode() and subscription and subscription.tariff_id:
+            try:
+                from app.database.crud.tariff import get_tariff_by_id
 
-    # Добавляем информацию о тарифе перед "Выберите действие"
-    if tariff_info_block:
-        action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
-        if action_prompt_text in base_text:
-            base_text = base_text.replace(action_prompt_text, f'{tariff_info_block}\n\n{action_prompt_text}')
+                tariff = await get_tariff_by_id(db, subscription.tariff_id)
+                if tariff:
+                    is_daily_tariff = getattr(tariff, 'is_daily', False)
+                    tariff_info_block = f'\n📦 Тариф: {html.escape(tariff.name)}'
+            except Exception as e:
+                logger.debug('Не удалось загрузить тариф для главного меню', error=e)
+
+        base_text = texts.MAIN_MENU.format(
+            user_name=html.escape(user.full_name or ''),
+            subscription_status=_get_subscription_status(user, texts, is_daily_tariff),
+        )
+
+        if tariff_info_block:
+            action_prompt_text = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
+            if action_prompt_text in base_text:
+                base_text = base_text.replace(action_prompt_text, f'{tariff_info_block}\n\n{action_prompt_text}')
 
     action_prompt = texts.t('MAIN_MENU_ACTION_PROMPT', 'Выберите действие:')
 
@@ -1501,7 +1310,16 @@ async def handle_activate_button(callback: types.CallbackQuery, db_user: User, d
     from app.services.subscription_renewal_service import SubscriptionRenewalService
     from app.services.subscription_service import SubscriptionService
 
-    subscription = await get_subscription_by_user_id(db, db_user.id)
+    if settings.is_multi_tariff_enabled():
+        from app.database.crud.subscription import get_active_subscriptions_by_user_id
+
+        active_subs = await get_active_subscriptions_by_user_id(db, db_user.id)
+        # For menu display: prefer non-daily, most days remaining
+        non_daily = [s for s in active_subs if not getattr(s, 'is_daily_tariff', False)]
+        _eligible = non_daily or active_subs
+        subscription = max(_eligible, key=lambda s: s.days_left) if _eligible else None
+    else:
+        subscription = await get_subscription_by_user_id(db, db_user.id)
 
     # Если подписка активна — ничего не делаем
     if subscription and subscription.status == 'ACTIVE' and subscription.end_date > datetime.now(UTC):
@@ -1693,20 +1511,14 @@ def register_handlers(dp: Dispatcher):
     )
 
     dp.callback_query.register(
-        show_settings_menu,
-        F.data == 'menu_settings',
-    )
-
-    dp.callback_query.register(
         show_promo_groups_info,
         F.data == 'menu_info_promo_groups',
     )
 
-    # FAQ button was removed from info menu, so this handler is no longer used
-    # dp.callback_query.register(
-    #     show_faq_pages,
-    #     F.data == 'menu_info_faq',
-    # )
+    dp.callback_query.register(
+        show_faq_pages,
+        F.data == 'menu_faq',
+    )
 
     dp.callback_query.register(
         show_faq_page,
@@ -1734,16 +1546,6 @@ def register_handlers(dp: Dispatcher):
     )
 
     dp.callback_query.register(show_language_menu, F.data == 'menu_language')
-
-    dp.callback_query.register(
-        show_faq_menu,
-        F.data == 'menu_faq',
-    )
-
-    dp.callback_query.register(
-        show_faq_answer,
-        F.data.startswith('faq_answer:'),
-    )
 
     dp.callback_query.register(process_language_change, F.data.startswith('language_select:'), StateFilter(None))
 

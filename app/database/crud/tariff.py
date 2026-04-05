@@ -3,7 +3,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import PromoGroup, Subscription, Tariff
+from app.database.models import PromoGroup, Subscription, SubscriptionStatus, Tariff
 
 
 logger = structlog.get_logger(__name__)
@@ -125,14 +125,10 @@ async def clear_trial_tariff(db: AsyncSession) -> None:
 async def get_tariffs_for_user(
     db: AsyncSession,
     promo_group_id: int | None = None,
-    user_id: int | None = None,
 ) -> list[Tariff]:
     """
     Получает тарифы, доступные для пользователя с учетом его промогруппы.
     Если у тарифа нет ограничений по промогруппам - он доступен всем.
-    
-    Триальные тарифы (с is_trial_available=True) НИКОГДА не отображаются в списке тарифов.
-    Они доступны только через отдельную кнопку "Тестовая подписка" в главном меню.
     """
     query = (
         select(Tariff)
@@ -144,13 +140,9 @@ async def get_tariffs_for_user(
     result = await db.execute(query)
     tariffs = result.scalars().all()
 
-    # Фильтруем по промогруппе, исключая триальные тарифы
+    # Фильтруем по промогруппе
     available_tariffs = []
     for tariff in tariffs:
-        # ВСЕГДА исключаем триальные тарифы из списка покупки
-        if tariff.is_trial_available:
-            continue
-
         if not tariff.allowed_promo_groups:
             # Нет ограничений - доступен всем
             available_tariffs.append(tariff)
@@ -199,7 +191,7 @@ async def create_tariff(
     # Видимость в разделе подарков
     show_in_gift: bool = True,
     # Режим сброса трафика
-    traffic_reset_mode: str | None = None,  # DAY, WEEK, MONTH, NO_RESET, None = глобальная настройка
+    traffic_reset_mode: str | None = None,  # DAY, WEEK, MONTH, MONTH_ROLLING, NO_RESET, None = глобальная настройка
     # Внешний сквад RemnaWave
     external_squad_uuid: str | None = None,
 ) -> Tariff:
@@ -401,7 +393,8 @@ async def update_tariff(
 async def delete_tariff(db: AsyncSession, tariff: Tariff) -> bool:
     """
     Удаляет тариф.
-    Подписки с этим тарифом получат tariff_id = NULL.
+    FK с ondelete=RESTRICT — удаление невозможно, если есть привязанные подписки.
+    Вызывающий код должен проверить отсутствие активных подписок до вызова.
     """
     tariff_id = tariff.id
     tariff_name = tariff.name
@@ -412,7 +405,7 @@ async def delete_tariff(db: AsyncSession, tariff: Tariff) -> bool:
     )
     affected_subscriptions = subscriptions_count.scalar_one()
 
-    # Удаляем тариф (FK с ondelete=SET NULL автоматически обнулит tariff_id в подписках)
+    # Удаляем тариф (FK RESTRICT — подписок с tariff_id быть не должно)
     await db.delete(tariff)
     await db.commit()
 
@@ -429,6 +422,18 @@ async def delete_tariff(db: AsyncSession, tariff: Tariff) -> bool:
 async def get_tariff_subscriptions_count(db: AsyncSession, tariff_id: int) -> int:
     """Подсчитывает количество подписок на тарифе."""
     result = await db.execute(select(func.count(Subscription.id)).where(Subscription.tariff_id == tariff_id))
+    return int(result.scalar_one())
+
+
+async def get_active_subscriptions_count_by_tariff_id(db: AsyncSession, tariff_id: int) -> int:
+    """Подсчитывает количество активных (active/trial) подписок на тарифе."""
+    active_statuses = [SubscriptionStatus.ACTIVE.value, SubscriptionStatus.TRIAL.value]
+    result = await db.execute(
+        select(func.count(Subscription.id)).where(
+            Subscription.tariff_id == tariff_id,
+            Subscription.status.in_(active_statuses),
+        )
+    )
     return int(result.scalar_one())
 
 

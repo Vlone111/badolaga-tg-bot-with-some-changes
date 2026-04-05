@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ==================== User-facing ====================
@@ -38,12 +36,6 @@ class PartnerApplicationInfo(BaseModel):
     processed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
-
-    @field_serializer('created_at', 'processed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class PartnerCampaignInfo(BaseModel):
@@ -119,12 +111,6 @@ class CampaignReferralItem(BaseModel):
     is_active: bool = False
     total_earnings_kopeks: int = 0
 
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class PartnerCampaignDetailedStats(BaseModel):
     """Detailed stats for a single campaign."""
@@ -171,12 +157,6 @@ class AdminPartnerApplicationItem(BaseModel):
     created_at: datetime
     processed_at: datetime | None = None
 
-    @field_serializer('created_at', 'processed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class AdminPartnerApplicationsResponse(BaseModel):
     """List of partner applications."""
@@ -211,12 +191,6 @@ class AdminPartnerItem(BaseModel):
     balance_kopeks: int = 0
     partner_status: str
     created_at: datetime
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class AdminPartnerListResponse(BaseModel):
@@ -258,12 +232,6 @@ class AdminPartnerDetailResponse(BaseModel):
     conversion_to_paid: float = 0.0
     campaigns: list[CampaignSummary] = []
     created_at: datetime
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class AdminUpdateCommissionRequest(BaseModel):
