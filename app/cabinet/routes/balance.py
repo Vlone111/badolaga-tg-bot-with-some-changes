@@ -316,43 +316,6 @@ async def create_topup(
             detail='Balance top-up is restricted for this account',
         )
 
-    # Try to apply referral code if user doesn't have a referrer yet and amount >= 100 RUB
-    if (
-        request.referral_code
-        and not user.referred_by_id
-        and request.amount_kopeks >= settings.REFERRAL_MINIMUM_TOPUP_KOPEKS
-    ):
-        from app.database.crud.user import get_user_by_referral_code
-        from app.services.referral_service import process_referral_registration
-
-        referrer = await get_user_by_referral_code(db, request.referral_code)
-        if referrer and referrer.id != user.id:
-            user.referred_by_id = referrer.id
-            await db.commit()
-            logger.info(
-                '✅ Реферальный код применен при пополнении баланса',
-                user_id=user.id,
-                referrer_id=referrer.id,
-                amount_kopeks=request.amount_kopeks,
-            )
-
-            # Trigger referral registration process to send notifications and create pending earning
-            try:
-                async with create_bot() as bot:
-                    await process_referral_registration(db, user.id, referrer.id, bot=bot)
-                logger.info(
-                    '✅ Процесс регистрации реферала инициирован при пополнении',
-                    user_id=user.id,
-                    referrer_id=referrer.id,
-                )
-            except Exception as e:
-                logger.error(
-                    '❌ Ошибка при инициировании регистрации реферала',
-                    user_id=user.id,
-                    referrer_id=referrer.id,
-                    error=e,
-                )
-
     # Validate payment method
     methods = await get_payment_methods(user=user, db=db)
     method = next((m for m in methods if m.id == request.payment_method), None)
@@ -397,7 +360,7 @@ async def create_topup(
             option = (request.payment_option or '').strip().lower()
             # Use description with telegram_id for tax receipts
             description = settings.get_balance_payment_description(
-                request.amount_kopeks, telegram_user_id=user.telegram_id
+                request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
             )
             if option == 'sbp':
                 result = await payment_service.create_yookassa_sbp_payment(
@@ -460,7 +423,7 @@ async def create_topup(
                 amount_usd=amount_usd,
                 asset=settings.CRYPTOBOT_DEFAULT_ASSET,
                 description=settings.get_balance_payment_description(
-                    request.amount_kopeks, telegram_user_id=user.telegram_id
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
                 payload=f'cabinet_topup_{user.id}_{request.amount_kopeks}',
             )
@@ -521,7 +484,7 @@ async def create_topup(
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
                 description=settings.get_balance_payment_description(
-                    request.amount_kopeks, telegram_user_id=user.telegram_id
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
                 ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 payment_method_code=method_code,
@@ -550,7 +513,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 return_url=cabinet_return_url,
                 success_url=cabinet_success_url,
@@ -577,7 +542,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
             )
 
@@ -607,8 +574,11 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
+                payment_method=option,
             )
 
             if result:
@@ -647,7 +617,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 return_url=cabinet_success_url,
                 failed_url=cabinet_failed_url,
@@ -674,7 +646,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 telegram_id=user.telegram_id,
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 return_url=cabinet_success_url,
@@ -702,7 +676,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
             )
 
@@ -723,7 +699,7 @@ async def create_topup(
                 )
 
             # Use payment_option to select sbp or card
-            KASSA_AI_OPTION_MAP = {'sbp': 44, 'card': 36}
+            KASSA_AI_OPTION_MAP = {'sbp': 44, 'card': 36, 'sberpay': 43}
             option = (request.payment_option or '').strip().lower()
             ps_id = KASSA_AI_OPTION_MAP.get(option)  # None = use env default
 
@@ -732,7 +708,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 email=getattr(user, 'email', None),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 payment_system_id=ps_id,
@@ -759,7 +737,9 @@ async def create_topup(
                 db=db,
                 user_id=user.id,
                 amount_kopeks=request.amount_kopeks,
-                description=settings.get_balance_payment_description(request.amount_kopeks),
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
                 language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
                 success_url=cabinet_success_url,
                 fail_url=cabinet_failed_url,
@@ -784,6 +764,35 @@ async def create_topup(
             user_identifier = user.telegram_id or user.id
             payment_url = f'{settings.TRIBUTE_DONATE_LINK}&user_id={user_identifier}'
             payment_id = f'tribute_{user_identifier}_{request.amount_kopeks}'
+
+        elif request.payment_method == 'severpay':
+            if not settings.is_severpay_enabled():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail='SeverPay payment method is unavailable',
+                )
+
+            payment_service = PaymentService()
+            result = await payment_service.create_severpay_payment(
+                db=db,
+                user_id=user.id,
+                amount_kopeks=request.amount_kopeks,
+                description=settings.get_balance_payment_description(
+                    request.amount_kopeks, telegram_user_id=user.telegram_id, user_db_id=user.id
+                ),
+                email=getattr(user, 'email', None),
+                language=getattr(user, 'language', None) or settings.DEFAULT_LANGUAGE,
+                return_url=cabinet_success_url,
+            )
+
+            if result and result.get('payment_url'):
+                payment_url = result.get('payment_url')
+                payment_id = str(result.get('local_payment_id') or result.get('order_id') or 'pending')
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail='Failed to create SeverPay payment',
+                )
 
         else:
             # For other payment methods, redirect to bot

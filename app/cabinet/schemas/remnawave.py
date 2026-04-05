@@ -3,9 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 # ============ Status & Connection ============
@@ -49,11 +47,9 @@ class ServerInfo(BaseModel):
     """Server hardware info."""
 
     cpu_cores: int
-    cpu_physical_cores: int
     memory_total: int
     memory_used: int
     memory_free: int
-    memory_available: int
     uptime_seconds: int
 
 
@@ -95,12 +91,6 @@ class SystemStatsResponse(BaseModel):
     nodes_weekly: list[dict[str, Any]] = Field(default_factory=list)
     last_updated: datetime | None = None
 
-    @field_serializer('last_updated')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 # ============ Nodes ============
 
@@ -116,28 +106,22 @@ class NodeInfo(BaseModel):
     is_disabled: bool
     is_node_online: bool
     is_xray_running: bool
-    users_online: int | None = None
+    users_online: int = 0
     traffic_used_bytes: int | None = None
     traffic_limit_bytes: int | None = None
     last_status_change: datetime | None = None
     last_status_message: str | None = None
-    xray_uptime: str | None = None
+    xray_uptime: int = 0
     is_traffic_tracking_active: bool = False
     traffic_reset_day: int | None = None
     notify_percent: int | None = None
     consumption_multiplier: float = 1.0
-    cpu_count: int | None = None
-    cpu_model: str | None = None
-    total_ram: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     provider_uuid: str | None = None
-
-    @field_serializer('last_status_change', 'created_at', 'updated_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
+    versions: dict[str, str] | None = None
+    system: dict[str, Any] | None = None
+    active_plugin_uuid: str | None = None
 
 
 class NodesListResponse(BaseModel):
@@ -165,12 +149,6 @@ class NodeStatisticsResponse(BaseModel):
     realtime: dict[str, Any] | None = None
     usage_history: list[dict[str, Any]] = Field(default_factory=list)
     last_updated: datetime | None = None
-
-    @field_serializer('last_updated')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class NodeUsageResponse(BaseModel):

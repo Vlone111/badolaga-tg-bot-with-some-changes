@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 # ==================== User-facing ====================
@@ -49,12 +47,6 @@ class WithdrawalItemResponse(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_serializer('created_at', 'processed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class WithdrawalListResponse(BaseModel):
     """List of user's withdrawal requests."""
@@ -92,12 +84,6 @@ class AdminWithdrawalItem(BaseModel):
     created_at: datetime
     processed_at: datetime | None = None
 
-    @field_serializer('created_at', 'processed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class AdminWithdrawalListResponse(BaseModel):
     """List of withdrawal requests for admin."""
@@ -129,12 +115,6 @@ class AdminWithdrawalDetailResponse(BaseModel):
     total_earnings_kopeks: int = 0
     created_at: datetime
     processed_at: datetime | None = None
-
-    @field_serializer('created_at', 'processed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class AdminApproveWithdrawalRequest(BaseModel):

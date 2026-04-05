@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer, model_validator
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field, model_validator
 
 
 class GiftConfigSubOption(BaseModel):
@@ -50,12 +48,6 @@ class GiftConfigResponse(BaseModel):
     promo_group_name: str | None = None
     active_discount_percent: int | None = None
     active_discount_expires_at: datetime | None = None
-
-    @field_serializer('active_discount_expires_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class GiftPurchaseRequest(BaseModel):
@@ -101,12 +93,6 @@ class PendingGiftResponse(BaseModel):
     sender_display: str | None = None
     created_at: datetime | None = None
 
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class SentGiftResponse(BaseModel):
     """A gift the current user has sent."""
@@ -121,12 +107,6 @@ class SentGiftResponse(BaseModel):
     activated_by_username: str | None = None
     created_at: datetime | None = None
 
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class ReceivedGiftResponse(BaseModel):
     """A gift the current user has received."""
@@ -139,12 +119,6 @@ class ReceivedGiftResponse(BaseModel):
     sender_display: str | None = None
     gift_message: str | None = None
     created_at: datetime | None = None
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class ActivateGiftRequest(BaseModel):

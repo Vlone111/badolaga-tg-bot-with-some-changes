@@ -58,7 +58,9 @@ services:
       POSTGRES_DB: '${POSTGRES_DB:-remnawave_bot}'
       POSTGRES_USER: '${POSTGRES_USER:-remnawave_user}'
       POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-secure_password_123}'
+
       REDIS_URL: 'redis://redis:6379/0'
+
       TZ: 'Europe/Moscow'
       LOCALES_PATH: '${LOCALES_PATH:-/app/locales}'
     volumes:
@@ -78,7 +80,6 @@ services:
       - '${WEB_API_PORT:-8080}:8080'
     networks:
       - bot_network
-      - remnawave-network
     healthcheck:
       test:
         [
@@ -101,7 +102,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/24
-  remnawave-network:
-    external: true
-    name: remnawave-network
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+    driver_opts:
+      com.docker.network.driver.mtu: 1350

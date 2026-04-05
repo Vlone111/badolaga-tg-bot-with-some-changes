@@ -1,3 +1,4 @@
+import html
 from datetime import UTC, datetime
 
 import structlog
@@ -13,7 +14,6 @@ from app.localization.texts import get_texts
 from app.services.payment_service import PaymentService
 from app.states import BalanceStates
 from app.utils.decorators import error_handler
-from app.utils.timezone import format_local_datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -25,7 +25,7 @@ async def start_yookassa_payment(callback: types.CallbackQuery, db_user: User, s
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -71,7 +71,7 @@ async def start_yookassa_sbp_payment(callback: types.CallbackQuery, db_user: Use
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -119,7 +119,7 @@ async def process_yookassa_payment_amount(
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -274,7 +274,7 @@ async def process_yookassa_sbp_payment_amount(
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -548,7 +548,7 @@ async def check_yookassa_payment_status(callback: types.CallbackQuery, db: Async
             f'🆔 ID: {payment.yookassa_payment_id[:8]}...\n'
             f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}\n'
             f'📊 Статус: {emoji} {status}\n'
-            f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M")}\n'
+            f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M")}\n'
         )
 
         if payment.is_succeeded:

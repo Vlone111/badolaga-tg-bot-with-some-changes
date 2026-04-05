@@ -1,3 +1,5 @@
+import html
+
 import structlog
 from aiogram import types
 from aiogram.fsm.context import FSMContext
@@ -10,7 +12,6 @@ from app.localization.texts import get_texts
 from app.services.payment_service import PaymentService
 from app.states import BalanceStates
 from app.utils.decorators import error_handler
-from app.utils.timezone import format_local_datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -22,7 +23,7 @@ async def start_cryptobot_payment(callback: types.CallbackQuery, db_user: User, 
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -86,7 +87,7 @@ async def process_cryptobot_payment_amount(
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -264,7 +265,7 @@ async def check_cryptobot_payment_status(callback: types.CallbackQuery, db: Asyn
             f'🆔 ID: {payment.invoice_id[:8]}...\n'
             f'💰 Сумма: {payment.amount} {payment.asset}\n'
             f'📊 Статус: {emoji} {status}\n'
-            f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M")}\n'
+            f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M")}\n'
         )
 
         if payment.is_paid:

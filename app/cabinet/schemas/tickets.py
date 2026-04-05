@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 class TicketMessageResponse(BaseModel):
@@ -21,12 +19,6 @@ class TicketMessageResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class TicketResponse(BaseModel):
@@ -45,12 +37,6 @@ class TicketResponse(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_serializer('created_at', 'updated_at', 'closed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class TicketDetailResponse(BaseModel):
     """Ticket with all messages."""
@@ -67,12 +53,6 @@ class TicketDetailResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at', 'updated_at', 'closed_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class TicketListResponse(BaseModel):

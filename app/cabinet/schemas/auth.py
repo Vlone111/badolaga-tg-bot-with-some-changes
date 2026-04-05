@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, EmailStr, Field
 
 
 class TelegramAuthRequest(BaseModel):
@@ -128,12 +126,6 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class EmailRegisterStandaloneRequest(BaseModel):

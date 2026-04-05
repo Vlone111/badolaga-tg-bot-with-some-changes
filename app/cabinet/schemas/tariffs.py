@@ -2,9 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-from app.utils.timezone import format_local_datetime
+from pydantic import BaseModel, Field
 
 
 class PeriodPrice(BaseModel):
@@ -68,12 +66,6 @@ class TariffListItem(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_serializer('created_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
-
 
 class TariffListResponse(BaseModel):
     """Response with list of tariffs."""
@@ -120,7 +112,7 @@ class TariffDetailResponse(BaseModel):
     is_daily: bool = False
     daily_price_kopeks: int = 0
     # Режим сброса трафика
-    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, NO_RESET, None = глобальная настройка
+    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, MONTH_ROLLING, NO_RESET, None = глобальная настройка
     # Внешний сквад RemnaWave
     external_squad_uuid: str | None = None
     # Показывать в подарках
@@ -130,12 +122,6 @@ class TariffDetailResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    @field_serializer('created_at', 'updated_at')
-    def serialize_datetime(self, value: datetime) -> str | None:
-        if value is None:
-            return None
-        return format_local_datetime(value, '%Y-%m-%dT%H:%M:%S')
 
 
 class ExternalSquadInfoResponse(BaseModel):
@@ -184,7 +170,7 @@ class TariffCreateRequest(BaseModel):
     is_daily: bool = False
     daily_price_kopeks: int = Field(0, ge=0)
     # Режим сброса трафика
-    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, NO_RESET, None = глобальная настройка
+    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, MONTH_ROLLING, NO_RESET, None = глобальная настройка
     # Внешний сквад RemnaWave
     external_squad_uuid: str | None = Field(None, pattern=UUID_PATTERN)
     # Показывать в подарках
@@ -225,7 +211,7 @@ class TariffUpdateRequest(BaseModel):
     is_daily: bool | None = None
     daily_price_kopeks: int | None = Field(None, ge=0)
     # Режим сброса трафика
-    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, NO_RESET, None = глобальная настройка
+    traffic_reset_mode: str | None = None  # DAY, WEEK, MONTH, MONTH_ROLLING, NO_RESET, None = глобальная настройка
     # Внешний сквад RemnaWave
     external_squad_uuid: str | None = Field(None, pattern=UUID_PATTERN)
     # Показывать в подарках

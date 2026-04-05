@@ -1,3 +1,4 @@
+import html
 from datetime import UTC, datetime
 
 import structlog
@@ -13,7 +14,6 @@ from app.localization.texts import get_texts
 from app.services.payment_service import PaymentService, get_user_by_id as fetch_user_by_id
 from app.states import BalanceStates
 from app.utils.decorators import error_handler
-from app.utils.timezone import format_local_datetime
 
 
 logger = structlog.get_logger(__name__)
@@ -29,7 +29,7 @@ async def start_wata_payment(
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -89,7 +89,7 @@ async def process_wata_payment_amount(
 
     # Проверка ограничения на пополнение
     if getattr(db_user, 'restriction_topup', False):
-        reason = getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором'
+        reason = html.escape(getattr(db_user, 'restriction_reason', None) or 'Действие ограничено администратором')
         support_url = settings.get_support_contact_url()
         keyboard = []
         if support_url:
@@ -298,7 +298,7 @@ async def check_wata_payment_status(
         f'🆔 ID: {payment.payment_link_id}',
         f'💰 Сумма: {settings.format_price(payment.amount_kopeks)}',
         f'📊 Статус: {label_info["emoji"]} {label_info["label"]}',
-        f'📅 Создан: {format_local_datetime(payment.created_at, "%d.%m.%Y %H:%M") if payment.created_at else "—"}',
+        f'📅 Создан: {payment.created_at.strftime("%d.%m.%Y %H:%M") if payment.created_at else "—"}',
     ]
 
     if payment.is_paid:
